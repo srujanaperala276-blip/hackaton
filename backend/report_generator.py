@@ -10,6 +10,7 @@ def generate_json_report(analysis_result: dict, filename: str) -> dict:
             "status": "completed"
         },
         "overall_similarity": analysis_result.get("overall_similarity", 0),
+        "ai_summary": analysis_result.get("ai_summary", "Manual review required."),
         "sections": analysis_result.get("sections", {}),
         "flagged_sentences": analysis_result.get("flagged_sentences", []),
         "statistics": {

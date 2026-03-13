@@ -1,5 +1,6 @@
 from backend.similarity import compute_batch_semantic_similarity, compute_exact_similarity
 from backend.document_parser import segment_sentences, extract_sections
+from backend.ai_analyzer import get_paraphrase_explanation, generate_report_summary
 import json
 
 class PlagiarismEngine:
@@ -64,11 +65,27 @@ class PlagiarismEngine:
                  
         overall_similarity = (total_score / total_sentences * 100) if total_sentences > 0 else 0
         
+        # --- NEW: Groq AI Deep Analysis ---
+        # 1. Get AI explanations for top 5 matches
+        # Sort flagged sentences by similarity
+        flagged_sentences.sort(key=lambda x: x['similarity'], reverse=True)
+        top_matches = flagged_sentences[:5]
+        
+        for match in top_matches:
+            match['ai_explanation'] = get_paraphrase_explanation(
+                match['matched_sentence'], 
+                match['sentence']
+            )
+            
+        # 2. Generate high-level AI Summary
+        ai_summary = generate_report_summary(flagged_sentences, overall_similarity)
+        
         # Analyze sections separately (basic approach)
         section_scores = self._analyze_sections(sections, all_source_sentences)
         
         return {
             "overall_similarity": round(overall_similarity, 2),
+            "ai_summary": ai_summary,
             "sections": section_scores,
             "flagged_sentences": flagged_sentences,
             "total_sentences": total_sentences,

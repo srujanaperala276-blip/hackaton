@@ -1,4 +1,4 @@
-import { PieChart, AlertTriangle, CheckCircle, FileText, Download } from 'lucide-react';
+import { PieChart, AlertTriangle, CheckCircle, FileText, Download, Sparkles } from 'lucide-react';
 
 export default function ResultsDashboard({ results, onReset }) {
   if (!results) return null;
@@ -67,6 +67,19 @@ export default function ResultsDashboard({ results, onReset }) {
           </div>
         </div>
         
+        {/* AI Summary Section */}
+        <div className="px-8 pb-8 pt-0">
+           <div className="p-5 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+              <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wider flex items-center mb-2">
+                 <Sparkles className="w-4 h-4 mr-2" />
+                 AI Analysis Summary
+              </h3>
+              <p className="text-slate-700 leading-relaxed italic text-sm">
+                 "{results.ai_summary || "Deep AI analysis summary available after processing."}"
+              </p>
+           </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 border-t border-slate-100">
           {/* Main Score */}
           <div className="p-8 flex flex-col items-center justify-center">
@@ -134,6 +147,19 @@ export default function ResultsDashboard({ results, onReset }) {
                          </div>
                       </div>
                    </div>
+                   
+                   {/* AI Explanation Section */}
+                   {item.ai_explanation && (
+                      <div className="px-5 pb-5 pt-0">
+                         <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-lg flex items-start">
+                            <Sparkles className="w-4 h-4 text-indigo-500 mr-3 mt-1 flex-shrink-0" />
+                            <div>
+                               <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">AI Explanation</p>
+                               <p className="text-indigo-900 text-sm leading-relaxed">{item.ai_explanation}</p>
+                            </div>
+                         </div>
+                      </div>
+                   )}
                 </div>
              ))}
            </div>
