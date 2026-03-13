@@ -1,0 +1,1 @@
+Machine learning is a field of artificial intelligence. It uses statistical techniques to give computers the ability to learn from data. The methodology involves training models on large datasets. In conclusion, AI is transforming the world.
