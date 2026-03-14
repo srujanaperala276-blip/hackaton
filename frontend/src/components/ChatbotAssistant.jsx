@@ -42,7 +42,7 @@ export default function ChatbotAssistant({ context = "" }) {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8000/chat', {
+      const response = await axios.post('/chat', {
         message: input,
         history: messages.slice(1), 
         context: context

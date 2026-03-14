@@ -59,14 +59,14 @@ export default function Upload({ onUploadSuccess }) {
 
     try {
       if (uploadType === 'source') {
-        const res = await axios.post('http://localhost:8000/source', formData, {
+        const res = await axios.post('/source', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         setSuccessMsg(`"${file.name}" has been added to the reference library.`);
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       } else {
-        const uploadRes = await axios.post('http://localhost:8000/upload', formData, {
+        const uploadRes = await axios.post('/upload', formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
@@ -74,7 +74,7 @@ export default function Upload({ onUploadSuccess }) {
         
         const documentId = uploadRes.data.assignment_id;
         
-        const analyzeRes = await axios.post('http://localhost:8000/analyze', {
+        const analyzeRes = await axios.post('/analyze', {
            document_id: documentId,
            enable_web_search: enableWebSearch
         });
