@@ -1,8 +1,8 @@
 import os
 import sqlite3
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import shutil
 from dotenv import load_dotenv
@@ -11,12 +11,16 @@ load_dotenv()
 
 from backend.document_parser import extract_text
 from backend.plagiarism_engine import PlagiarismEngine
-from backend.report_generator import generate_json_report
+from backend.report_generator import generate_json_report, generate_docx_report
 from backend.ai_features import get_chatbot_response_async
 
-app = FastAPI(title="Srujana AI Platform")
+app = FastAPI(title="AI Plagiarism Detector API")
 
-# CORS remains for local dev
+# Mount exports directory
+EXPORTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'exports')
+os.makedirs(EXPORTS_DIR, exist_ok=True)
+app.mount("/exports", StaticFiles(directory=EXPORTS_DIR), name="exports")
+
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -29,29 +33,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Root API Check
-@app.get("/api/health")
-async def health():
-    return {"status": "online", "service": "Srujana AI"}
-
-# Mount the frontend built files (Vite build output)
-FRONTEND_PATH = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')
-
-if os.path.exists(FRONTEND_PATH):
-    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_PATH, "assets")), name="assets")
-
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    # If it's an API route that wasn't caught, let it 404
-    if full_path.startswith("upload") or full_path.startswith("chat") or full_path.startswith("analyze"):
-        raise HTTPException(status_code=404)
-    
-    # Otherwise, serve index.html for potential SPA routing
-    index_file = os.path.join(FRONTEND_PATH, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {"error": "Frontend not built. Please run 'npm run build' in the frontend folder."}
 
 engine = PlagiarismEngine()
 
@@ -86,6 +67,10 @@ class ChatRequest(BaseModel):
     message: str
     history: list = []
     context: str = ""
+
+class ExportRequest(BaseModel):
+    report_data: dict
+    size: str = "A4"
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -221,6 +206,17 @@ async def chat_with_ai(request: ChatRequest):
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/export")
+async def export_report(request: ExportRequest):
+    """Generate a downloadable DOCX report."""
+    try:
+        file_path = generate_docx_report(request.report_data, request.size)
+        filename = os.path.basename(file_path)
+        return {"download_url": f"http://localhost:8000/exports/{filename}", "filename": filename}
+    except Exception as e:
+        print(f"Export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

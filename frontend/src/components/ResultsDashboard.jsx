@@ -1,8 +1,36 @@
-import { PieChart, AlertTriangle, CheckCircle, FileText, Download, Sparkles, RefreshCcw } from 'lucide-react';
+import { PieChart, AlertTriangle, CheckCircle, FileText, Download, Sparkles, RefreshCcw, ChevronDown } from 'lucide-react';
 import ChatbotAssistant from './ChatbotAssistant';
+import { useState } from 'react';
+import axios from 'axios';
 
 export default function ResultsDashboard({ results, onReset }) {
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
+
   if (!results) return null;
+
+  const handleExport = async (size) => {
+    setIsExporting(true);
+    setShowExportOptions(false);
+    try {
+      const response = await axios.post('http://localhost:8000/export', {
+        report_data: results,
+        size: size
+      });
+      
+      const link = document.createElement('a');
+      link.href = response.data.download_url;
+      link.setAttribute('download', response.data.filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to generate report. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const score = results.overall_similarity;
   
@@ -48,21 +76,53 @@ export default function ResultsDashboard({ results, onReset }) {
                 {results.metadata?.filename || "Uploaded Document"}
               </p>
             </div>
-            <div className="flex gap-3">
-               <button 
-                  onClick={handleDownloadReport}
-                  className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 font-medium transition flex items-center"
-               >
-                 <Download className="w-4 h-4 mr-2"/>
-                 Export JSON
-               </button>
-               <button 
-                  onClick={onReset}
-                  className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 font-medium transition"
-               >
-                 Scan Another
-               </button>
-            </div>
+             <div className="flex gap-3">
+                <div className="relative">
+                   <button 
+                     onClick={() => setShowExportOptions(!showExportOptions)}
+                     className="flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50"
+                     disabled={isExporting}
+                   >
+                     <Download className="w-4 h-4" />
+                     {isExporting ? 'Generating...' : 'Export Report'}
+                     <ChevronDown className="w-4 h-4 ml-1" />
+                   </button>
+                   
+                   {showExportOptions && (
+                     <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                       {[
+                         { id: 'A4', label: 'A4 Academic Paper', desc: 'Standard essay/research size' },
+                         { id: 'A2', label: 'A2 Conference Poster', desc: 'Large format symposium' },
+                         { id: 'A5', label: 'A5 Short Report', desc: 'Lab reports & briefs' },
+                         { id: 'A6', label: 'A6 Abstract', desc: 'Handouts & summaries' }
+                       ].map(opt => (
+                         <button 
+                           key={opt.id}
+                           onClick={() => handleExport(opt.id)}
+                           className="w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors group border-none bg-transparent cursor-pointer"
+                         >
+                           <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 m-0">{opt.label}</p>
+                           <p className="text-[10px] text-slate-400 font-semibold m-0">{opt.desc}</p>
+                         </button>
+                       ))}
+                       <div className="border-t border-slate-100 my-1"></div>
+                       <button 
+                         onClick={handleDownloadReport}
+                         className="w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors group border-none bg-transparent cursor-pointer"
+                       >
+                         <p className="text-sm font-bold text-slate-600 m-0">Export JSON (Raw Data)</p>
+                       </button>
+                     </div>
+                   )}
+                </div>
+                
+                <button 
+                   onClick={onReset}
+                   className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 font-medium transition"
+                >
+                  Scan Another
+                </button>
+             </div>
           </div>
         </div>
         

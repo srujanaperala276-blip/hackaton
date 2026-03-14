@@ -26,5 +26,6 @@ Thumbs.db
 # Temp
 tmp_out.txt
 test_hf_api.py
+
+# Uploads
 uploads/
-backend/uploads/
