@@ -4,15 +4,17 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import shutil
+from dotenv import load_dotenv
 
-# Import our backend logic
+load_dotenv()
+
 from backend.document_parser import extract_text
 from backend.plagiarism_engine import PlagiarismEngine
 from backend.report_generator import generate_json_report
+from backend.ai_features import get_chatbot_response_async
 
 app = FastAPI(title="AI Plagiarism Detector API")
 
-# Allow Frontend CORS
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -26,11 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Plagiarism Engine
-# In production, this model takes time to load. Doing it on startup is good.
 engine = PlagiarismEngine()
 
-# SQLite Database connection setup
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'plagiarism_db.sqlite')
 
 def get_db():
@@ -39,7 +38,6 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Init DB tables
 def init_db():
     schema_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'schema.sql')
     if os.path.exists(schema_path):
@@ -57,6 +55,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class AnalyzeRequest(BaseModel):
     document_id: int
+    enable_web_search: bool = False
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+    context: str = ""
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -71,7 +75,6 @@ async def upload_document(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # Extract text immediately for basic validation
     try:
         text = extract_text(file_path, file.filename)
     except Exception as e:
@@ -87,13 +90,37 @@ async def upload_document(file: UploadFile = File(...)):
     
     return {"message": "File uploaded successfully", "assignment_id": assignment_id, "filename": file.filename}
 
+@app.post("/source")
+async def add_source_document(file: UploadFile = File(...)):
+    """Add a document to the reference library for comparison."""
+    ext = file.filename.split('.')[-1].lower()
+    if ext not in ["pdf", "docx", "txt"]:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+        
+    file_path = os.path.join(UPLOAD_DIR, f"source_{file.filename}")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        text = extract_text(file_path, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to extract text: {str(e)}")
+        
+    # Save to DB
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO source_documents (filename, content) VALUES (?, ?)", (file.filename, text))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Reference document added to library", "filename": file.filename}
+
 @app.post("/analyze")
 async def analyze_document(request: AnalyzeRequest):
     """Run plagiarism analysis on an uploaded document."""
     conn = get_db()
     cursor = conn.cursor()
     
-    # 1. Fetch the document details
     cursor.execute("SELECT * FROM assignments WHERE id = ?", (request.document_id,))
     assignment = cursor.fetchone()
     if not assignment:
@@ -103,34 +130,24 @@ async def analyze_document(request: AnalyzeRequest):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on server")
         
-    # 2. Extract Document Text
     text = extract_text(file_path, assignment['filename'])
     
-    # 3. Fetch Source Documents from Database (for comparison)
     cursor.execute("SELECT content FROM source_documents")
     source_rows = cursor.fetchall()
     source_texts = [row['content'] for row in source_rows]
     
-    # To demonstrate, if we have NO source documents, let's inject a dummy source document
-    # so we can actually test plagiarism detection
-    if not source_texts:
-        dummy_source = "Machine learning is a field of artificial intelligence. It uses statistical techniques to give computers the ability to learn from data. The methodology involves training models on large datasets. In conclusion, AI is transforming the world."
-        source_texts.append(dummy_source)
-        # Optionally insert to DB for future checks
-        cursor.execute("INSERT INTO source_documents (filename, content) VALUES (?, ?)", ("dummy_source.txt", dummy_source))
-        conn.commit()
+    if not source_texts and not request.enable_web_search:
+        raise HTTPException(status_code=400, detail="Reference library is empty and web search is disabled. Please upload an 'Original' document or enable web search.")
 
     # 4. Run Analysis
     try:
         cursor.execute("UPDATE assignments SET status = 'processing' WHERE id = ?", (request.document_id,))
         conn.commit()
         
-        analysis_result = engine.analyze_document(text, source_texts)
+        analysis_result = await engine.analyze_document(text, source_texts, request.enable_web_search)
         
-        # 5. Generate structured report
         report = generate_json_report(analysis_result, assignment['filename'])
         
-        # 6. Save Report metadata to DB
         cursor.execute("""
             INSERT INTO reports (assignment_id, overall_similarity, intro_similarity, methodology_similarity, conclusion_similarity)
             VALUES (?, ?, ?, ?, ?)
@@ -170,6 +187,15 @@ async def get_report(assignment_id: int):
         raise HTTPException(status_code=404, detail="Report not found")
         
     return dict(report_row)
+
+@app.post("/chat")
+async def chat_with_ai(request: ChatRequest):
+    """Chat with the Srujana AI assistant."""
+    try:
+        response = await get_chatbot_response_async(request.message, request.history, request.context)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

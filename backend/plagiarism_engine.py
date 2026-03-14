@@ -1,32 +1,31 @@
 from backend.similarity import compute_batch_semantic_similarity, compute_exact_similarity
 from backend.document_parser import segment_sentences, extract_sections
-from backend.ai_analyzer import get_paraphrase_explanation, generate_report_summary
+from backend.web_search import WebSearcher
+from backend.ai_features import generate_rewrite_suggestion_async
 import json
+import asyncio
+import random
 
 class PlagiarismEngine:
     def __init__(self, semantic_threshold: float = 0.8, exact_threshold: float = 0.95):
         self.semantic_threshold = semantic_threshold
         self.exact_threshold = exact_threshold
+        self.web_searcher = WebSearcher()
         
-    def analyze_document(self, text: str, source_texts: list) -> dict:
+    async def analyze_document(self, text: str, source_texts: list, enable_web_search: bool = False) -> dict:
         """
-        Analyze a document for plagiarism against a list of source texts.
-        Returns a rich object describing exact and semantic matches.
+        Orchestrates the asynchronous plagiarism detection process.
         """
         target_sentences = segment_sentences(text)
         sections = extract_sections(text)
         
-        # Flatten all source texts into a giant list of sentences
-        # In a real database, you would query this efficiently rather than keeping it all in memory
         all_source_sentences = []
         for src in source_texts:
             all_source_sentences.extend(segment_sentences(src))
             
-        if not all_source_sentences:
+        if not all_source_sentences and not enable_web_search:
             return self._build_empty_report(target_sentences, sections)
             
-        # Run Batch Semantic Similarity
-        # This will compare all target sentences against all source sentences
         batch_results = compute_batch_semantic_similarity(target_sentences, all_source_sentences)
         
         flagged_sentences = []
@@ -38,11 +37,7 @@ class PlagiarismEngine:
             sim_score = match['highest_sim']
             matched_source_sentence = all_source_sentences[match['matched_idx']]
             
-            # Check exact similarity first
-            # Since exact similarity is fast for pairs if we already suspect a semantic match, 
-            # we can run EXACT similarity on the highest matching semantic sentence to verify if it's identical
             if sim_score > self.exact_threshold:
-                # Let's double check with TF-IDF if it's REALLY an exact match
                 exact_sim = compute_exact_similarity(sentence, matched_source_sentence)
                 if exact_sim > self.exact_threshold:
                     flagged_sentences.append({
@@ -51,7 +46,7 @@ class PlagiarismEngine:
                         "similarity": exact_sim,
                         "type": "exact"
                     })
-                    total_score += 1.0 # 100% plagiarized
+                    total_score += 1.0
                     continue
             
             if sim_score > self.semantic_threshold:
@@ -61,33 +56,48 @@ class PlagiarismEngine:
                         "similarity": sim_score,
                         "type": "semantic"
                  })
-                 total_score += sim_score # Weight it by similarity
+                 total_score += sim_score
                  
         overall_similarity = (total_score / total_sentences * 100) if total_sentences > 0 else 0
         
-        # --- NEW: Groq AI Deep Analysis ---
-        # 1. Get AI explanations for top 5 matches
-        # Sort flagged sentences by similarity
-        flagged_sentences.sort(key=lambda x: x['similarity'], reverse=True)
-        top_matches = flagged_sentences[:5]
-        
-        for match in top_matches:
-            match['ai_explanation'] = get_paraphrase_explanation(
-                match['matched_sentence'], 
-                match['sentence']
-            )
+        web_matches = []
+        if enable_web_search and self.web_searcher.api_key:
+            candidates = [s for s in target_sentences if len(s.split()) > 8]
+            sample_sentences = random.sample(candidates, min(3, len(candidates)))
             
-        # 2. Generate high-level AI Summary
-        ai_summary = generate_report_summary(flagged_sentences, overall_similarity)
+            for sentence in sample_sentences:
+                results = self.web_searcher.search(query=f'"{sentence}"', num_results=2)
+                if results:
+                    web_matches.append({
+                        "sentence": sentence,
+                        "matches": results
+                    })
+                    overall_similarity = min(100, overall_similarity + 5)
         
-        # Analyze sections separately (basic approach)
+        flagged_sentences.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        # Get AI rewriting suggestions for the top 5 matches to avoid rate limiting
+        top_matches = flagged_sentences[:5]
+        rewrite_tasks = [
+            generate_rewrite_suggestion_async(match['sentence'])
+            for match in top_matches
+        ]
+        
+        if rewrite_tasks:
+            try:
+                rewrites = await asyncio.gather(*rewrite_tasks)
+                for i, match in enumerate(top_matches):
+                    match['ai_rewrite_suggestion'] = rewrites[i]
+            except Exception as e:
+                print(f"Parallel rewrite generation failed: {e}")
+        
         section_scores = self._analyze_sections(sections, all_source_sentences)
         
         return {
             "overall_similarity": round(overall_similarity, 2),
-            "ai_summary": ai_summary,
             "sections": section_scores,
             "flagged_sentences": flagged_sentences,
+            "web_matches": web_matches,
             "total_sentences": total_sentences,
             "plagiarized_sentences_count": len(flagged_sentences)
         }
@@ -105,7 +115,6 @@ class PlagiarismEngine:
                 section_results[section_name] = 0
                 continue
                 
-            # Quick batch analysis for the section
             batch_results = compute_batch_semantic_similarity(sents, source_sentences)
             
             section_score = 0
@@ -124,6 +133,7 @@ class PlagiarismEngine:
             "overall_similarity": 0.0,
             "sections": section_scores,
             "flagged_sentences": [],
+            "web_matches": [],
             "total_sentences": len(target_sentences),
             "plagiarized_sentences_count": 0
         }

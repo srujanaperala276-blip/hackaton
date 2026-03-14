@@ -1,11 +1,11 @@
-import { PieChart, AlertTriangle, CheckCircle, FileText, Download, Sparkles } from 'lucide-react';
+import { PieChart, AlertTriangle, CheckCircle, FileText, Download, Sparkles, RefreshCcw } from 'lucide-react';
+import ChatbotAssistant from './ChatbotAssistant';
 
 export default function ResultsDashboard({ results, onReset }) {
   if (!results) return null;
 
   const score = results.overall_similarity;
   
-  // Determine color based on threshold
   let targetColor = 'text-green-500';
   let targetBg = 'bg-green-50';
   let targetBorder = 'border-green-200';
@@ -38,7 +38,6 @@ export default function ResultsDashboard({ results, onReset }) {
 
   return (
     <div className="max-w-5xl mx-auto mt-8 animate-in fade-in zoom-in-95 duration-300 pb-20">
-      {/* Header Summary Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
         <div className="p-8 pb-0">
           <div className="flex justify-between items-start mb-6">
@@ -67,21 +66,7 @@ export default function ResultsDashboard({ results, onReset }) {
           </div>
         </div>
         
-        {/* AI Summary Section */}
-        <div className="px-8 pb-8 pt-0">
-           <div className="p-5 bg-indigo-50/50 border border-indigo-100 rounded-xl">
-              <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wider flex items-center mb-2">
-                 <Sparkles className="w-4 h-4 mr-2" />
-                 AI Analysis Summary
-              </h3>
-              <p className="text-slate-700 leading-relaxed italic text-sm">
-                 "{results.ai_summary || "Deep AI analysis summary available after processing."}"
-              </p>
-           </div>
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 border-t border-slate-100">
-          {/* Main Score */}
           <div className="p-8 flex flex-col items-center justify-center">
              <div className={`w-32 h-32 rounded-full border-8 ${targetBorder} flex items-center justify-center mb-4 relative`}>
                 <span className={`text-4xl font-bold ${targetColor}`}>{score}%</span>
@@ -93,7 +78,6 @@ export default function ResultsDashboard({ results, onReset }) {
              <p className="text-slate-500 mt-3 text-center text-sm">Overall Similarity Score</p>
           </div>
 
-          {/* Stats Group */}
           <div className="p-8 flex flex-col justify-center space-y-6 col-span-2">
              <h3 className="font-semibold text-slate-700 text-lg flex items-center border-b border-slate-100 pb-3">
                <PieChart className="w-5 h-5 mr-3 text-indigo-500" />
@@ -115,7 +99,6 @@ export default function ResultsDashboard({ results, onReset }) {
         </div>
       </div>
 
-      {/* Flagged Sentences List */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
          <h3 className="font-semibold text-slate-800 text-xl mb-6">Detailed Findings</h3>
          
@@ -147,21 +130,22 @@ export default function ResultsDashboard({ results, onReset }) {
                          </div>
                       </div>
                    </div>
-                   
-                   {/* AI Explanation Section */}
-                   {item.ai_explanation && (
-                      <div className="px-5 pb-5 pt-0">
-                         <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-lg flex items-start">
-                            <Sparkles className="w-4 h-4 text-indigo-500 mr-3 mt-1 flex-shrink-0" />
-                            <div>
-                               <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">AI Explanation</p>
-                               <p className="text-indigo-900 text-sm leading-relaxed">{item.ai_explanation}</p>
-                            </div>
-                         </div>
-                      </div>
-                   )}
-                </div>
-             ))}
+
+                    {item.ai_rewrite_suggestion && (
+                       <div className="px-5 pb-5 pt-0">
+                          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
+                             <div className="flex items-center gap-2 mb-2">
+                                <RefreshCcw className="w-4 h-4 text-emerald-600" />
+                                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">AI Suggested Rewrite (Zero Plagiarism)</p>
+                             </div>
+                             <p className="text-emerald-900 text-sm leading-relaxed font-medium italic">
+                                "{item.ai_rewrite_suggestion}"
+                             </p>
+                          </div>
+                       </div>
+                    )}
+                 </div>
+              ))}
            </div>
          ) : (
            <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-xl">
@@ -171,6 +155,44 @@ export default function ResultsDashboard({ results, onReset }) {
            </div>
          )}
       </div>
+
+      {results.web_matches && results.web_matches.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-8">
+           <h3 className="font-semibold text-slate-800 text-xl mb-6 flex items-center">
+              <Sparkles className="w-5 h-5 text-indigo-500 mr-2" />
+              Web Search Matches
+           </h3>
+           <div className="space-y-6">
+             {results.web_matches.map((item, idx) => (
+                <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                   <div className="bg-indigo-50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center">
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2 py-1 rounded-md">
+                         Internet Search
+                      </span>
+                   </div>
+                   <div className="p-5">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Queried Sentence</p>
+                      <div className="bg-slate-50 border border-slate-100 p-4 rounded-lg mb-4">
+                         <p className="text-slate-800 text-sm leading-relaxed">{item.sentence}</p>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Web Results</p>
+                      <div className="space-y-3">
+                         {item.matches.map((match, mIdx) => (
+                             <div key={mIdx} className="bg-white border border-slate-100 shadow-sm p-4 rounded-lg hover:border-indigo-200 transition-colors">
+                                <a href={match.link} target="_blank" rel="noopener noreferrer" className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline line-clamp-1">{match.title}</a>
+                                <p className="text-xs text-emerald-600 mb-2 truncate">{match.link}</p>
+                                <p className="text-sm text-slate-600 line-clamp-2">{match.snippet}</p>
+                             </div>
+                         ))}
+                      </div>
+                   </div>
+                </div>
+             ))}
+           </div>
+        </div>
+      )}
+
+       <ChatbotAssistant context={`The user just finished a plagiarism scan for '${results.metadata?.filename}'. Total similarity is ${results.overall_similarity}%. There are ${results.statistics?.plagiarized_count || 0} flagged matches.`} />
     </div>
   );
 }

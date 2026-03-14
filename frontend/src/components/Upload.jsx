@@ -7,6 +7,9 @@ export default function Upload({ onUploadSuccess }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [uploadType, setUploadType] = useState('assignment');
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [enableWebSearch, setEnableWebSearch] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileChange = (e) => {
@@ -17,6 +20,7 @@ export default function Upload({ onUploadSuccess }) {
   const validateAndSetFile = (selectedFile) => {
     const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
     setError(null);
+    setSuccessMsg(null);
     
     if (allowedTypes.includes(selectedFile.type) || selectedFile.name.endsWith('.docx')) {
        setFile(selectedFile);
@@ -48,41 +52,82 @@ export default function Upload({ onUploadSuccess }) {
 
     setIsUploading(true);
     setError(null);
+    setSuccessMsg(null);
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      // 1. Upload File
-      const uploadRes = await axios.post('http://localhost:8000/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      const documentId = uploadRes.data.assignment_id;
-      
-      // 2. Trigger Analysis
-      const analyzeRes = await axios.post('http://localhost:8000/analyze', {
-         document_id: documentId
-      });
-      
-      // 3. Pass results to parent
-      onUploadSuccess(analyzeRes.data);
+      if (uploadType === 'source') {
+        const res = await axios.post('http://localhost:8000/source', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        setSuccessMsg(`"${file.name}" has been added to the reference library.`);
+        setFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } else {
+        const uploadRes = await axios.post('http://localhost:8000/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        const documentId = uploadRes.data.assignment_id;
+        
+        const analyzeRes = await axios.post('http://localhost:8000/analyze', {
+           document_id: documentId,
+           enable_web_search: enableWebSearch
+        });
+        
+        onUploadSuccess(analyzeRes.data);
+      }
       
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.detail || "An error occurred during submission.");
+      console.error("Submission Error:", err);
+      let errorMessage = "An error occurred during submission.";
+      
+      if (!err.response) {
+        errorMessage = "Cannot connect to Backend Server. Please ensure 'start.bat' is running.";
+      } else if (err.response.data && err.response.data.detail) {
+        errorMessage = typeof err.response.data.detail === 'string' 
+          ? err.response.data.detail 
+          : JSON.stringify(err.response.data.detail);
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsUploading(false);
     }
   };
 
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   return (
     <div className="max-w-2xl mx-auto mt-12 p-6 bg-white rounded-xl shadow-sm border border-slate-200">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-semibold text-slate-800">Scan for Plagiarism</h2>
-        <p className="text-slate-500 mt-2">Upload your assignment to detect exact and paraphrased matches.</p>
+        <h2 className="text-2xl font-semibold text-slate-800">Plagiarism Engine</h2>
+        <p className="text-slate-500 mt-2">Manage your reference library or scan documents for plagiarism.</p>
+        
+        <div className="flex bg-slate-100 p-1 rounded-lg mt-6 w-fit mx-auto">
+           <button 
+             onClick={() => { setUploadType('assignment'); setError(null); setSuccessMsg(null); }}
+             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${uploadType === 'assignment' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+           >
+             Scan Document
+           </button>
+           <button 
+             onClick={() => { setUploadType('source'); setError(null); setSuccessMsg(null); }}
+             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${uploadType === 'source' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+           >
+             Add to Reference Library
+           </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -107,7 +152,7 @@ export default function Upload({ onUploadSuccess }) {
              <div className="flex flex-col items-center text-indigo-600">
                  <File size={48} className="mb-4 opacity-80" />
                  <p className="font-medium text-lg">{file.name}</p>
-                 <p className="text-sm text-indigo-400 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                 <p className="text-sm text-indigo-400 mt-1">{formatFileSize(file.size)}</p>
                  <button 
                   type="button" 
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
@@ -120,7 +165,7 @@ export default function Upload({ onUploadSuccess }) {
             <div className="flex flex-col items-center text-slate-500">
               <UploadCloud size={48} className="mb-4 text-slate-400" />
               <p className="mb-2 text-sm text-slate-500">
-                <span className="font-semibold text-indigo-600">Click to upload</span> or drag and drop
+                <span className="font-semibold text-indigo-600">Click to upload</span> {uploadType === 'source' ? 'an ORIGINAL' : 'a SUSPECT'} file
               </p>
               <p className="text-xs text-slate-400">PDF, DOCX, or TXT (Max 10MB)</p>
             </div>
@@ -131,6 +176,32 @@ export default function Upload({ onUploadSuccess }) {
           <div className="mt-4 flex items-center p-4 text-sm text-red-800 border border-red-300 rounded-lg bg-red-50">
             <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
             <span className="font-medium">{error}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mt-4 flex items-center p-4 text-sm text-emerald-800 border border-emerald-300 rounded-lg bg-emerald-50">
+            <div className="w-5 h-5 mr-2 flex-shrink-0 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold font-mono">
+               ✓
+            </div>
+            <span className="font-medium">{successMsg}</span>
+          </div>
+        )}
+
+        {uploadType === 'assignment' && (
+          <div className="mt-6 flex items-start p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <input 
+              type="checkbox" 
+              id="webSearchToggle"
+              checked={enableWebSearch} 
+              onChange={(e) => setEnableWebSearch(e.target.checked)} 
+              className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+            />
+            <label htmlFor="webSearchToggle" className="ml-3 flex flex-col cursor-pointer">
+              <span className="text-sm font-semibold text-slate-700">Enable Deep Web Search</span>
+              <span className="text-xs text-slate-500">Cross-reference with Internet sources (Requires Serper API Key)</span>
+              <span className="text-xs text-amber-600 mt-1 font-medium italic">Note: Uses free tier Serper.dev API credits (limit 2500 per account).</span>
+            </label>
           </div>
         )}
 
@@ -146,10 +217,10 @@ export default function Upload({ onUploadSuccess }) {
             {isUploading ? (
               <>
                 <Loader className="animate-spin w-5 h-5 mr-2" />
-                Processing...
+                {uploadType === 'source' ? 'Adding to Library...' : 'Scanning...'}
               </>
             ) : (
-              'Scan Document'
+              uploadType === 'source' ? 'Add to Reference' : 'Scan Assignment'
             )}
           </button>
         </div>

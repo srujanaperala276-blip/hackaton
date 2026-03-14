@@ -1,8 +1,1 @@
-Introduction
-Machine learning represents a specialized area within artificial intelligence. It relies on mathematical methods allowing machines to understand information. 
-
-Methodology
-The approach requires utilizing massive amounts of information to teach algorithms. 
-
-Conclusion
-To summarize, artificial intelligence is completely changing our society today.
+Machine learning is a field of  The methodology involves training models on large datasets. In conclusion, AI is transforming the world.

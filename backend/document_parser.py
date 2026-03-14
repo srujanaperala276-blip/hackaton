@@ -1,5 +1,5 @@
 import os
-from PyPDF2 import PdfReader
+import fitz  # PyMuPDF
 import docx
 import re
 import spacy
@@ -29,12 +29,13 @@ def extract_text(file_path: str, filename: str) -> str:
 
 def extract_from_pdf(file_path: str) -> str:
     text = ""
-    with open(file_path, 'rb') as file:
-        reader = PdfReader(file)
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
+    try:
+        doc = fitz.open(file_path)
+        for page in doc:
+            text += page.get_text() + "\n"
+        doc.close()
+    except Exception as e:
+        print(f"Error extracting PDF: {e}")
     return text
 
 def extract_from_docx(file_path: str) -> str:
