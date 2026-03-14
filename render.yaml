@@ -3,7 +3,7 @@ services:
     name: srujana-academic-platform
     runtime: python
     buildCommand: ./build.sh
-    startCommand: gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.app:app
+    startCommand: python -m gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.app:app
     envVars:
       - key: PORT
         value: 8000
